@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Student Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css"></head><body>
+<div id="load"><div class="ring"></div><h2>กำลังรวบรวมข้อมูล</h2><div class="pb"><div id="bar"></div></div><ul id="ls"></ul></div>
+<div class="app">
+ <header class="top"><div><h1 id="o-name"></h1><p><span id="o-id"></span> &nbsp;|&nbsp; <span id="o-school"></span></p></div><span id="mode" class="tag"></span></header>
+ <nav id="nav"></nav><main id="main"></main>
+</div>
+<div id="toasts"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="js/config.js"></script><script src="js/app.js"></script>
+</body></html>
