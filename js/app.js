@@ -29,6 +29,45 @@ const T={
  tasks:{n:'งานที่ต้องทำ',i:'⏰',f:[['title','งาน'],['subject','วิชา','text',0,1],['due_at','กำหนดส่ง','datetime-local']],sort:(a,b)=>(a.done-b.done)||new Date(a.due_at)-new Date(b.due_at)}
 };
 const cache={};let fin=null,news=[],newsNote='';
+let scheduleImageUrl=null;
+const SCHEDULE_IMAGE_PATH='schedule';
+const SCHEDULE_IMAGE_DB='student-dashboard-images';
+
+function openImageStore(){
+ return new Promise((resolve,reject)=>{
+  const request=indexedDB.open(SCHEDULE_IMAGE_DB,1);
+  request.onupgradeneeded=()=>request.result.createObjectStore('images');
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error);
+ });
+}
+async function localImage(action,value){
+ const db=await openImageStore();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction('images',action==='get'?'readonly':'readwrite'),store=tx.objectStore('images');
+  const request=action==='get'?store.get('timetable'):action==='put'?store.put(value,'timetable'):store.delete('timetable');
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error);
+  tx.oncomplete=()=>db.close();
+  tx.onerror=()=>{db.close();reject(tx.error)};
+ });
+}
+async function loadScheduleImage(){
+ try{
+  if(sb){
+   const{data,error}=await sb.storage.from('timetable').list('',{search:'schedule'});
+   if(error)throw error;
+   scheduleImageUrl=data.some(x=>x.name===SCHEDULE_IMAGE_PATH)
+    ?sb.storage.from('timetable').getPublicUrl(SCHEDULE_IMAGE_PATH).data.publicUrl+'?v='+Date.now():null;
+  }else{
+   const blob=await localImage('get');
+   scheduleImageUrl=blob?URL.createObjectURL(blob):null;
+  }
+ }catch(error){
+  toast(`โหลดรูปตารางเรียนไม่สำเร็จ: ${error.message}`,'bad');
+  throw error;
+ }
+}
 
 /* ---------- ตัวช่วย ---------- */
 const fmtDT=i=>i?new Date(i).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}):'-';
@@ -84,6 +123,11 @@ function listView(t,extra=''){const c=T[t],rows=[...cache[t]];if(c.sort)rows.sor
  <div class="card tw">${rows.length?`<table><tr>${tk?'<th></th>':''}${c.f.map(f=>`<th>${f[1]}</th>`).join('')}<th></th></tr>${rows.map(r=>`<tr class="${tk&&r.done?'dn':''}">
  ${tk?`<td><input type="checkbox" style="width:auto" data-a="tog" data-id="${r.id}" ${r.done?'checked':''}></td>`:''}${c.f.map(f=>`<td>${cell(f,r[f[0]])}</td>`).join('')}
  <td><button class="btn g s" data-a="edit" data-t="${t}" data-id="${r.id}">แก้ไข</button> <button class="btn g s" data-a="del" data-t="${t}" data-id="${r.id}">ลบ</button></td></tr>`).join('')}</table>`:'<div class="empty">ยังไม่มีข้อมูล กด "+ เพิ่ม" เพื่อเริ่มต้น</div>'}</div>`}
+function timetableView(){return`<div class="row"><h2>🗓️ ตารางเรียน</h2>${scheduleImageUrl?'':`
+ <label class="btn schedule-upload">เลือกรูปตารางเรียน<input type="file" accept="image/jpeg,image/png,image/webp" data-a="schedule-upload"></label>`}
+ </div><section class="card schedule-card">${scheduleImageUrl
+  ?`<img class="schedule-image" src="${esc(scheduleImageUrl)}" alt="รูปตารางเรียน"><div class="bt"><label class="btn g schedule-upload">เปลี่ยนรูป<input type="file" accept="image/jpeg,image/png,image/webp" data-a="schedule-upload"></label><button class="btn d" data-a="schedule-delete">ลบรูป</button></div>`
+  :'<div class="empty">ยังไม่มีรูปตารางเรียน เลือกรูปเพื่อเพิ่มได้เลย</div>'}</section>`}
 const fbFrame=()=>`<iframe id="fb" src="https://www.facebook.com/plugins/page.php?href=${encodeURIComponent(C.FB_PAGE_URL)}&tabs=timeline&width=500&height=600&small_header=true&adapt_container_width=true&t=${Date.now()}" width="100%" height="600" style="border:0;background:#fff;border-radius:8px" loading="lazy" allow="encrypted-media"></iframe>`;
 const views={
  home(){const pend=cache.tasks.filter(x=>!x.done).sort((a,b)=>new Date(a.due_at)-new Date(b.due_at)),a=todayRow();
@@ -97,7 +141,8 @@ const views={
  finance(){return`<div class="row"><h2>💰 การเงินประจำสัปดาห์</h2><div class="bt"><button class="btn g" data-a="rf">รีเฟรช</button>${C.SHEET_EDIT_URL?`<a class="btn" href="${esc(C.SHEET_EDIT_URL)}" target="_blank" rel="noopener">เปิด Google Sheet</a>`:''}</div></div>
   <div class="card tw">${fin?`<table><tr>${fin[0].map(h=>`<th>${esc(h)}</th>`).join('')}</tr>${fin.slice(1).map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table>`:'<div class="empty">ยังไม่ได้เชื่อม Google Sheet<br>ใส่ SHEET_CSV_URL ใน js/config.js (ดูวิธีใน README)</div>'}</div>`}
 };
-['timetable','files','contacts','attendance','tasks'].forEach(t=>views[t]=()=>listView(t));
+views.timetable=timetableView;
+['files','contacts','attendance','tasks'].forEach(t=>views[t]=()=>listView(t));
 const NAV=[['home','หน้าแรก','🏠'],['timetable','ตารางเรียน','🗓️'],['scores','คะแนน','📝'],['files','ไฟล์เรียน','📁'],['contacts','ติดต่อ','📞'],['attendance','เช็คชื่อ','✅'],['tasks','งาน','⏰'],['finance','การเงิน','💰']];
 function render(){const v=views[location.hash.slice(1)]?location.hash.slice(1):'home';
  $('#nav').innerHTML=NAV.map(([k,l,i])=>`<a href="#${k}" class="${k===v?'on':''}"><span>${i}</span>${l}</a>`).join('');
@@ -107,16 +152,42 @@ function render(){const v=views[location.hash.slice(1)]?location.hash.slice(1):'
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-a]');if(!b)return;const{a,t,id}=b.dataset;
  if(a==='add')openForm(t);else if(a==='edit')openForm(t,id);
  else if(a==='del')modal('ยืนยันการลบ','<p>ต้องการลบรายการนี้ใช่หรือไม่? การลบย้อนกลับไม่ได้</p>',async()=>{await db.del(t,id);await load(t);render();toast('ลบแล้ว')},'ลบ');
+ else if(a==='schedule-delete')modal('ยืนยันการลบรูป','<p>ต้องการลบรูปตารางเรียนใช่หรือไม่?</p>',async()=>{
+  if(sb){const{error}=await sb.storage.from('timetable').remove([SCHEDULE_IMAGE_PATH]);if(error)throw error}
+  else await localImage('delete');
+  if(scheduleImageUrl?.startsWith('blob:'))URL.revokeObjectURL(scheduleImageUrl);
+  scheduleImageUrl=null;render();toast('ลบรูปแล้ว')
+ },'ลบรูป');
  else if(a==='tog'){await db.save('tasks',{done:b.checked},id);await load('tasks');render()}
  else if(a==='pres')markAtt('present');else if(a==='abs')absentForm();
  else if(a==='rf'){b.disabled=true;try{await loadFin();toast('อัปเดตแล้ว')}catch(x){toast('ดึงข้อมูลชีตไม่ได้: '+x.message,'bad')}render()}});
+document.addEventListener('change',async e=>{
+ const input=e.target.closest('[data-a="schedule-upload"]'),file=input?.files[0];
+ if(!file)return;
+ try{
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw Error('รองรับเฉพาะรูป JPG, PNG หรือ WebP');
+  if(file.size>10*1024*1024)throw Error('ขนาดรูปต้องไม่เกิน 10 MB');
+  if(sb){
+   const{error}=await sb.storage.from('timetable').upload(SCHEDULE_IMAGE_PATH,file,{upsert:true,contentType:file.type,cacheControl:'3600'});
+   if(error)throw error;
+   if(scheduleImageUrl?.startsWith('blob:'))URL.revokeObjectURL(scheduleImageUrl);
+   scheduleImageUrl=sb.storage.from('timetable').getPublicUrl(SCHEDULE_IMAGE_PATH).data.publicUrl+'?v='+Date.now();
+  }else{
+   await localImage('put',file);
+   if(scheduleImageUrl?.startsWith('blob:'))URL.revokeObjectURL(scheduleImageUrl);
+   scheduleImageUrl=URL.createObjectURL(file);
+  }
+  render();toast('อัปโหลดรูปตารางเรียนแล้ว');
+ }catch(error){toast(`อัปโหลดรูปไม่สำเร็จ: ${error.message}`,'bad')}
+ finally{input.value=''}
+});
 addEventListener('hashchange',render);setInterval(tick,1000);
 
 /* ---------- เริ่มระบบ ---------- */
 (async()=>{
  $('#o-name').textContent=C.OWNER.name;$('#o-id').textContent='รหัสนักเรียน '+C.OWNER.id;$('#o-school').textContent='โรงเรียน'+C.OWNER.school;
  const m=$('#mode');m.textContent=sb?'● Supabase':'โหมดทดลอง (เก็บในเครื่อง)';m.classList.toggle('on',!!sb);
- const steps=[...Object.keys(T).map(t=>[T[t].n,()=>load(t)]),['การเงิน (Google Sheet)',loadFin],['ข่าวประชาสัมพันธ์',loadNews]];let n=0;
+ const steps=[...Object.keys(T).filter(t=>t!=='timetable').map(t=>[T[t].n,()=>load(t)]),['รูปตารางเรียน',loadScheduleImage],['การเงิน (Google Sheet)',loadFin],['ข่าวประชาสัมพันธ์',loadNews]];let n=0;
  await Promise.all(steps.map(async([l,fn])=>{let ok='✓';try{await fn()}catch(e){ok='✗'}n++;$('#bar').style.width=n/steps.length*100+'%';$('#ls').insertAdjacentHTML('beforeend',`<li>${ok} ${l}</li>`)}));
  render();setTimeout(()=>$('#load').classList.add('out'),350);
 })();

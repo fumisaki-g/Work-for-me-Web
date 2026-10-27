@@ -13,3 +13,17 @@ do $$ declare t text; begin
   execute format('drop policy if exists "anon_all" on %I',t);
   execute format('create policy "anon_all" on %I for all to anon using(true) with check(true)',t);
  end loop; end $$;
+
+ -- รูปตารางเรียน: bucket สาธารณะสำหรับแสดงรูป และอนุญาต anon จัดการรูปได้
+ insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+ values('timetable','timetable',true,10485760,array['image/jpeg','image/png','image/webp'])
+ on conflict(id) do update set public=true,file_size_limit=10485760,allowed_mime_types=array['image/jpeg','image/png','image/webp'];
+
+ drop policy if exists "anon_timetable_read" on storage.objects;
+ create policy "anon_timetable_read" on storage.objects for select to anon using(bucket_id='timetable');
+ drop policy if exists "anon_timetable_upload" on storage.objects;
+ create policy "anon_timetable_upload" on storage.objects for insert to anon with check(bucket_id='timetable');
+ drop policy if exists "anon_timetable_update" on storage.objects;
+ create policy "anon_timetable_update" on storage.objects for update to anon using(bucket_id='timetable') with check(bucket_id='timetable');
+ drop policy if exists "anon_timetable_delete" on storage.objects;
+ create policy "anon_timetable_delete" on storage.objects for delete to anon using(bucket_id='timetable');
